@@ -103,15 +103,15 @@ async def run_rclone_task(
                 "-v"
             ]
         else:  # file
-            # copyid copies a single file by its Drive ID into the destination folder
-            dest_dir = f"{settings.DEST_PATH}/"
+            # copyid copies a single file by its Drive ID into the destination folder.
+            # Destination is a plain path relative to the remote root (no remote: prefix).
+            dest_dir = settings.DEST_PATH + "/"
             cmd = [
                 "rclone", "backend", "copyid",
                 f"{settings.REMOTE_NAME}:",
                 gdrive_id,
                 dest_dir,
                 "--config", settings.RCLONE_CONFIG_PATH,
-                "--drive-server-side-across-configs",
                 "-v"
             ]
 

@@ -50,5 +50,18 @@
         "start_time": "2026-05-22T09:21:28.863209",
         "end_time": "2026-05-22T09:21:29.635591",
         "error_message": "exit code 1"
+    },
+    {
+        "task_id": "8a3827e8",
+        "user_id": 8719853767,
+        "url": "https://drive.google.com/file/d/1LUJ8Nqx_FdmzOKAUETWk6oTFNc3t-Dd_/view?usp=drivesdk",
+        "type": "file",
+        "status": "failed",
+        "total_bytes": 0,
+        "transferred_bytes": 0,
+        "speed": "0 B/s",
+        "start_time": "2026-05-22T09:27:49.537890",
+        "end_time": "2026-05-22T09:27:58.140517",
+        "error_message": "2026/05/22 09:27:58 INFO  : META VERIFY 2-METHOD IN VIDEO.mp4: Copied (new)"
     }
 ]
