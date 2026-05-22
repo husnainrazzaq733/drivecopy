@@ -97,7 +97,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dest_name = await loop.run_in_executor(None, scrape_gdrive_name, link_type, gdrive_id)
 
     # Add task to queue
-    task = await task_queue.add_task(user_id, text, link_type, dest_name, status_msg)
+    task = await task_queue.add_task(user_id, text, gdrive_id, link_type, dest_name, status_msg)
     
     # Get queue position
     pos = task_queue.get_queue_position(task.task_id)

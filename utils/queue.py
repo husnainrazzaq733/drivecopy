@@ -15,7 +15,8 @@ class CloneTask:
     def __init__(
         self, 
         user_id: int, 
-        url: str, 
+        url: str,
+        gdrive_id: str,
         link_type: str, 
         dest_name: str, 
         message: Message
@@ -23,6 +24,7 @@ class CloneTask:
         self.task_id = str(uuid.uuid4())[:8]  # Compact 8-char ID
         self.user_id = user_id
         self.url = url
+        self.gdrive_id = gdrive_id
         self.link_type = link_type
         self.dest_name = dest_name
         self.message = message  # Telegram message to edit with progress
@@ -53,13 +55,14 @@ class TaskQueue:
     async def add_task(
         self, 
         user_id: int, 
-        url: str, 
+        url: str,
+        gdrive_id: str,
         link_type: str, 
         dest_name: str, 
         message: Message
     ) -> CloneTask:
         """Adds a new cloning task to the queue."""
-        task = CloneTask(user_id, url, link_type, dest_name, message)
+        task = CloneTask(user_id, url, gdrive_id, link_type, dest_name, message)
         
         # Save to database
         db.add_task(task.task_id, user_id, url, link_type)
@@ -163,7 +166,7 @@ class TaskQueue:
             error_occurred = False
             error_msg = ""
             
-            async for update in run_rclone_task(task.link_type, task.url, task.dest_name, task.task_id):
+            async for update in run_rclone_task(task.link_type, task.gdrive_id, task.dest_name, task.task_id):
                 if not update:
                     continue
                 
@@ -279,8 +282,17 @@ class TaskQueue:
         try:
             await message.edit_text(text, parse_mode="Markdown")
         except TelegramError as e:
-            # Handle rate limiting or message content unchanged errors
-            if "Message is not modified" not in str(e):
+            err_str = str(e)
+            if "Message is not modified" in err_str:
+                return
+            # If Markdown parsing failed, retry as plain text
+            if "can't parse" in err_str.lower() or "parse" in err_str.lower():
+                try:
+                    plain = text.replace("**", "").replace("`", "").replace("_", "")
+                    await message.edit_text(plain)
+                except TelegramError:
+                    pass
+            else:
                 logger.error(f"Telegram error editing message: {e}")
 
 # Global task queue instance
