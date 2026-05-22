@@ -57,21 +57,21 @@ async def run_rclone_task(
 
     # Build the command based on link type
     if link_type == "folder":
-        # Copies folder contents into a subfolder named dest_name
+        # Use root_folder_id connection string to set that folder as the source root
         src = f"{settings.REMOTE_NAME},root_folder_id={gdrive_id}:"
         dest = f"{settings.REMOTE_NAME}:{settings.DEST_PATH}/{dest_name}"
         cmd = [
             "rclone", "copy", src, dest,
             "--config", settings.RCLONE_CONFIG_PATH,
             "--drive-server-side-across-configs",
-            "--drive-shared-with-me",
             "--use-json-log",
             "--stats", "2s",
-            "--stats-log-level", "NOTICE"
+            "--stats-log-level", "NOTICE",
+            "-v"
         ]
     else:  # file
-        # copyid copies a file by ID to the destination directory
-        dest_dir = f"{settings.DEST_PATH}/"
+        # copyid copies a file by its Drive ID to the destination directory
+        dest_dir = f"{settings.REMOTE_NAME}:{settings.DEST_PATH}/"
         cmd = [
             "rclone", "backend", "copyid",
             f"{settings.REMOTE_NAME}:",
@@ -79,10 +79,7 @@ async def run_rclone_task(
             dest_dir,
             "--config", settings.RCLONE_CONFIG_PATH,
             "--drive-server-side-across-configs",
-            "--drive-shared-with-me",
-            "--use-json-log",
-            "--stats", "2s",
-            "--stats-log-level", "NOTICE"
+            "-v"
         ]
 
     logger.info(f"Starting Rclone command for task {task_id}: {' '.join(cmd)}")
@@ -98,6 +95,9 @@ async def run_rclone_task(
         # Register process for cancellation
         _active_processes[task_id] = process
 
+        # Collect error lines to surface a useful message on failure
+        error_lines = []
+
         # Read stdout line-by-line asynchronously
         while True:
             raw_line = await process.stdout.readline()
@@ -107,23 +107,35 @@ async def run_rclone_task(
             if not line:
                 continue
 
+            logger.debug(f"[Rclone {task_id}] {line}")
             parsed = parse_rclone_log_line(line)
             if parsed:
-                # If it has error levels or is standard output
-                if not parsed.get("is_stats") and parsed.get("level") == "error":
-                    logger.error(f"[Rclone Run {task_id}] {parsed.get('msg')}")
+                if not parsed.get("is_stats") and parsed.get("level") in ("error", "warning"):
+                    msg = parsed.get("msg", "")
+                    logger.error(f"[Rclone Run {task_id}] {msg}")
+                    if msg:
+                        error_lines.append(msg)
                 
                 yield parsed
+            else:
+                # Non-JSON output — treat as raw error text
+                error_lines.append(line)
 
         # Wait for process to complete
         return_code = await process.wait()
         logger.info(f"Rclone task {task_id} completed with return code {return_code}")
         
         if return_code != 0 and return_code != -15:  # -15 is SIGTERM (canceled)
+            # Build a meaningful error message from collected lines
+            if error_lines:
+                # Take last 3 most relevant lines
+                detail = " | ".join(error_lines[-3:])
+            else:
+                detail = f"exit code {return_code}"
             yield {
                 "is_stats": False,
                 "level": "error",
-                "msg": f"Rclone exited with error code {return_code}",
+                "msg": detail,
                 "exit_code": return_code
             }
 

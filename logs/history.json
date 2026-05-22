@@ -11,5 +11,18 @@
         "start_time": "2026-05-22T09:08:37.637051",
         "end_time": "2026-05-22T09:08:39.210519",
         "error_message": "text must be False"
+    },
+    {
+        "task_id": "fa80458d",
+        "user_id": 8719853767,
+        "url": "https://drive.google.com/drive/folders/1o9Rob0CPSDkNi36E3LuwsgwFkxIpeIre",
+        "type": "folder",
+        "status": "failed",
+        "total_bytes": 0,
+        "transferred_bytes": 0,
+        "speed": "0 B/s",
+        "start_time": "2026-05-22T09:18:31.696100",
+        "end_time": "2026-05-22T09:18:35.132874",
+        "error_message": "Rclone exited with error code 1"
     }
 ]

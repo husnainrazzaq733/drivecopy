@@ -37,9 +37,8 @@ def scrape_gdrive_name(link_type: str, gdrive_id: str) -> str:
             title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE)
             if title_match:
                 title = title_match.group(1).strip()
-                # Clean up title by removing Google Drive suffix
-                if " - Google Drive" in title:
-                    title = title.replace(" - Google Drive", "").strip()
+                # Clean up title by removing Google Drive suffix (both dash variants)
+                title = title.replace(" – Google Drive", "").replace(" - Google Drive", "").strip()
                 
                 # Check for default or error titles
                 if title and title not in ("Google Drive", "Google Drive: Sign-in", "Meet Google Drive – One place for all your files"):
