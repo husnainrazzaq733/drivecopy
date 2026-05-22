@@ -97,6 +97,8 @@ async def run_rclone_task(
                 "rclone", "copy", src, dest,
                 "--config", tmp_config_path,
                 "--drive-server-side-across-configs",
+                "--transfers", "16",
+                "--checkers", "16",
                 "--use-json-log",
                 "--stats", "2s",
                 "--stats-log-level", "NOTICE",
