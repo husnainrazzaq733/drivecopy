@@ -245,5 +245,18 @@
         "start_time": "2026-05-22T16:53:29.877096",
         "end_time": "2026-05-22T16:54:21.935802",
         "error_message": null
+    },
+    {
+        "task_id": "e4183e1f",
+        "user_id": 8719853767,
+        "url": "https://drive.google.com/drive/folders/1Yua9-cZ_A_dz-0D2FLB18HdjY9yml1PT?usp=drive_link",
+        "type": "folder",
+        "status": "completed",
+        "total_bytes": 26554300339,
+        "transferred_bytes": 26554300339,
+        "speed": "0 B/s",
+        "start_time": "2026-05-22T17:01:21.361865",
+        "end_time": "2026-05-22T17:01:36.751728",
+        "error_message": null
     }
 ]
