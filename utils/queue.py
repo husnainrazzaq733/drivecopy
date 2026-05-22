@@ -182,30 +182,45 @@ class TaskQueue:
                         error_occurred = True
                         error_msg = update["error"]
                         break
-                        
+
                     task.progress.update(update)
-                    
+
                     # Update database periodically
                     db.update_task(task.task_id, {
                         "total_bytes": update.get("total_bytes", 0),
                         "transferred_bytes": update.get("transferred_bytes", 0),
                         "speed": update.get("speed", "0 B/s")
                     })
-                    
-                    # Throttle Telegram edits to prevent rate limits (max once every 4 seconds)
+
+                    # Throttle Telegram edits to prevent rate limits (max once every 2 seconds)
                     now = datetime.utcnow()
-                    if (now - last_update_time).total_seconds() >= 4.0:
-                        progress_bar = build_progress_bar(update["percentage"])
-                        progress_text = (
-                            f"🌀 **Cloning Content...**\n"
-                            f"📂 **Name**: `{task.dest_name}`\n\n"
-                            f"├─ {progress_bar} ({update['percentage']:.1f}%)\n"
-                            f"├─ ⚡ **Speed**: `{update['speed']}`\n"
-                            f"├─ 📦 **Transferred**: `{update['transferred']} / {update['total']}`\n"
-                            f"├─ ⏳ **ETA**: `{update['eta']}`\n"
-                            f"└─ 📄 **Active**: `{update['active_file']}`\n\n"
-                            f"🚫 Use `/cancel` to stop this task."
-                        )
+                    if (now - last_update_time).total_seconds() >= 2.0:
+                        checks = update.get("checks", 0)
+                        transfers = update.get("transfers", 0)
+                        transferred_bytes = update.get("transferred_bytes", 0)
+                        is_scanning = transferred_bytes == 0 and checks > 0 and transfers == 0
+
+                        if is_scanning:
+                            progress_text = (
+                                f"🔍 **Scanning Files...**\n"
+                                f"📂 **Name**: `{task.dest_name}`\n"
+                                f"🔗 **Type**: `{task.link_type.capitalize()}`\n\n"
+                                f"├─ 📋 **Files scanned**: `{checks}`\n"
+                                f"└─ ⏳ **Please wait...**\n\n"
+                                f"🚫 Use `/cancel` to stop this task."
+                            )
+                        else:
+                            progress_bar = build_progress_bar(update["percentage"])
+                            progress_text = (
+                                f"🌀 **Cloning Content...**\n"
+                                f"📂 **Name**: `{task.dest_name}`\n\n"
+                                f"├─ {progress_bar} ({update['percentage']:.1f}%)\n"
+                                f"├─ ⚡ **Speed**: `{update['speed']}`\n"
+                                f"├─ 📦 **Transferred**: `{update['transferred']} / {update['total']}`\n"
+                                f"├─ ⏳ **ETA**: `{update['eta']}`\n"
+                                f"└─ 📄 **Active**: `{update['active_file']}`\n\n"
+                                f"🚫 Use `/cancel` to stop this task."
+                            )
                         await self._safe_edit_message(task.message, progress_text)
                         last_update_time = now
 

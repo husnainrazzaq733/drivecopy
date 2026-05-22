@@ -31,8 +31,8 @@ def scrape_gdrive_name(link_type: str, gdrive_id: str) -> str:
                 'Accept-Language': 'en-US,en;q=0.9'
             }
         )
-        # 5 seconds timeout to keep bot highly responsive
-        with urllib.request.urlopen(req, timeout=5) as response:
+        # 2 seconds timeout to keep bot highly responsive
+        with urllib.request.urlopen(req, timeout=2) as response:
             html = response.read().decode('utf-8', errors='ignore')
             title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE)
             if title_match:
