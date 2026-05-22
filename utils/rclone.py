@@ -97,6 +97,10 @@ async def run_rclone_task(
                 "rclone", "copy", src, dest,
                 "--config", tmp_config_path,
                 "--drive-server-side-across-configs",
+                "--transfers", "16",
+                "--checkers", "16",
+                "--drive-chunk-size", "128M",
+                "--drive-upload-cutoff", "128M",
                 "--use-json-log",
                 "--stats", "2s",
                 "--stats-log-level", "NOTICE",
@@ -112,6 +116,10 @@ async def run_rclone_task(
                 gdrive_id,
                 dest_dir,
                 "--config", settings.RCLONE_CONFIG_PATH,
+                "--transfers", "16",
+                "--checkers", "16",
+                "--drive-chunk-size", "128M",
+                "--drive-upload-cutoff", "128M",
                 "-v"
             ]
 
