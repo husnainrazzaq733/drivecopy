@@ -2,8 +2,6 @@ import os
 import shutil
 import asyncio
 import logging
-import configparser
-import tempfile
 from typing import AsyncGenerator, Dict, Optional
 from config.settings import settings
 from utils.helpers import parse_rclone_log_line
@@ -13,11 +11,9 @@ logger = logging.getLogger("bot.rclone")
 # Track active subprocesses: task_id -> asyncio.subprocess.Process
 _active_processes: Dict[str, asyncio.subprocess.Process] = {}
 
-
 def check_rclone_installed() -> bool:
     """Checks if Rclone is installed in the system PATH."""
     return shutil.which("rclone") is not None
-
 
 def cancel_rclone_task(task_id: str) -> bool:
     """Cancels a running Rclone process by killing the subprocess."""
@@ -36,36 +32,10 @@ def cancel_rclone_task(task_id: str) -> bool:
                 pass
     return False
 
-
-def _build_src_config(gdrive_id: str, task_id: str) -> str:
-    """
-    Creates a temporary rclone config file that adds a new source remote
-    identical to the main remote but with root_folder_id set to gdrive_id.
-    Returns the path to the temp config file.
-    The caller is responsible for deleting it.
-    """
-    config = configparser.RawConfigParser()
-    config.read(settings.RCLONE_CONFIG_PATH)
-
-    # Copy the existing remote section into a new temp section
-    src_name = f"_src_{task_id}"
-    config.add_section(src_name)
-    for key, value in config.items(settings.REMOTE_NAME):
-        config.set(src_name, key, value)
-    config.set(src_name, "root_folder_id", gdrive_id)
-
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".conf", delete=False, encoding="utf-8"
-    )
-    config.write(tmp)
-    tmp.close()
-    return tmp.name, src_name
-
-
 async def run_rclone_task(
-    link_type: str,
-    gdrive_id: str,
-    dest_name: str,
+    link_type: str, 
+    gdrive_id: str, 
+    dest_name: str, 
     task_id: str
 ) -> AsyncGenerator[Dict, None]:
     """
@@ -85,92 +55,72 @@ async def run_rclone_task(
         }
         return
 
-    tmp_config_path = None
+    # Build the command based on link type
+    if link_type == "folder":
+        # Copies folder contents into a subfolder named dest_name
+        src = f"{settings.REMOTE_NAME},root_folder_id={gdrive_id}:"
+        dest = f"{settings.REMOTE_NAME}:{settings.DEST_PATH}/{dest_name}"
+        cmd = [
+            "rclone", "copy", src, dest,
+            "--config", settings.RCLONE_CONFIG_PATH,
+            "--drive-server-side-across-configs",
+            "--use-json-log",
+            "--stats", "2s",
+            "--stats-log-level", "NOTICE"
+        ]
+    else:  # file
+        # copyid copies a file by ID to the destination directory
+        dest_dir = f"{settings.DEST_PATH}/"
+        cmd = [
+            "rclone", "backend", "copyid",
+            f"{settings.REMOTE_NAME}:",
+            gdrive_id,
+            dest_dir,
+            "--config", settings.RCLONE_CONFIG_PATH,
+            "--drive-server-side-across-configs",
+            "--use-json-log",
+            "--stats", "2s",
+            "--stats-log-level", "NOTICE"
+        ]
+
+    logger.info(f"Starting Rclone command for task {task_id}: {' '.join(cmd)}")
 
     try:
-        if link_type == "folder":
-            # Build a temp config with a new remote that has root_folder_id = gdrive_id
-            tmp_config_path, src_remote = _build_src_config(gdrive_id, task_id)
-            src = f"{src_remote}:"
-            dest = f"{settings.REMOTE_NAME}:{settings.DEST_PATH}/{dest_name}"
-            cmd = [
-                "rclone", "copy", src, dest,
-                "--config", tmp_config_path,
-                "--drive-server-side-across-configs",
-                "--transfers", "32",
-                "--checkers", "32",
-                "--drive-chunk-size", "256M",
-                "--drive-upload-cutoff", "256M",
-                "--drive-pacer-min-sleep", "10ms",
-                "--drive-pacer-burst", "200",
-                "--use-json-log",
-                "--stats", "2s",
-                "--stats-log-level", "NOTICE",
-                "-v"
-            ]
-        else:  # file
-            # copyid copies a single file by its Drive ID into the destination folder.
-            # Destination is a plain path relative to the remote root (no remote: prefix).
-            dest_dir = settings.DEST_PATH + "/"
-            cmd = [
-                "rclone", "backend", "copyid",
-                f"{settings.REMOTE_NAME}:",
-                gdrive_id,
-                dest_dir,
-                "--config", settings.RCLONE_CONFIG_PATH,
-                "--drive-chunk-size", "256M",
-                "--drive-upload-cutoff", "256M",
-                "--drive-pacer-min-sleep", "10ms",
-                "--drive-pacer-burst", "200",
-                "-v"
-            ]
-
-        logger.info(f"Starting Rclone command for task {task_id}: {' '.join(cmd)}")
-
         # Start async subprocess
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT
+            stderr=asyncio.subprocess.STDOUT,
+            text=True
         )
-
+        
         # Register process for cancellation
         _active_processes[task_id] = process
 
-        # Collect error lines to surface a useful message on failure
-        error_lines = []
-
         # Read stdout line-by-line asynchronously
+        # For standard text files, process.stdout.readline() returns a line
         while True:
-            raw_line = await process.stdout.readline()
-            if not raw_line:
-                break
-            line = raw_line.decode("utf-8", errors="ignore").strip()
+            line = await process.stdout.readline()
             if not line:
-                continue
-
-            logger.info(f"[Rclone {task_id}] {line}")
+                break
+            
             parsed = parse_rclone_log_line(line)
             if parsed:
-                if not parsed.get("is_stats") and parsed.get("level") in ("error", "warning"):
-                    msg = parsed.get("msg", "")
-                    if msg:
-                        error_lines.append(msg)
+                # If it has error levels or is standard output
+                if not parsed.get("is_stats") and parsed.get("level") == "error":
+                    logger.error(f"[Rclone Run {task_id}] {parsed.get('msg')}")
+                
                 yield parsed
-            else:
-                # Non-JSON line (e.g. CRITICAL errors printed before JSON logging starts)
-                error_lines.append(line)
 
         # Wait for process to complete
         return_code = await process.wait()
         logger.info(f"Rclone task {task_id} completed with return code {return_code}")
-
+        
         if return_code != 0 and return_code != -15:  # -15 is SIGTERM (canceled)
-            detail = " | ".join(error_lines[-3:]) if error_lines else f"exit code {return_code}"
             yield {
                 "is_stats": False,
                 "level": "error",
-                "msg": detail,
+                "msg": f"Rclone exited with error code {return_code}",
                 "exit_code": return_code
             }
 
@@ -192,9 +142,3 @@ async def run_rclone_task(
         # Deregister process
         if task_id in _active_processes:
             del _active_processes[task_id]
-        # Clean up temp config if created
-        if tmp_config_path and os.path.exists(tmp_config_path):
-            try:
-                os.remove(tmp_config_path)
-            except Exception:
-                pass

@@ -1,8 +1,8 @@
 import re
-import asyncio
 import logging
 import urllib.request
 import urllib.error
+import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 from config.settings import settings
@@ -31,32 +31,39 @@ def scrape_gdrive_name(link_type: str, gdrive_id: str) -> str:
                 'Accept-Language': 'en-US,en;q=0.9'
             }
         )
-        # 2 seconds timeout to keep bot highly responsive
-        with urllib.request.urlopen(req, timeout=2) as response:
+        # 5 seconds timeout to keep bot highly responsive
+        with urllib.request.urlopen(req, timeout=5) as response:
             html = response.read().decode('utf-8', errors='ignore')
             title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE)
             if title_match:
                 title = title_match.group(1).strip()
-                # Clean up title by removing Google Drive suffix (both dash variants)
-                title = title.replace(" – Google Drive", "").replace(" - Google Drive", "").strip()
+                # Clean up title by removing Google Drive suffix
+                if " - Google Drive" in title:
+                    title = title.replace(" - Google Drive", "").strip()
                 
                 # Check for default or error titles
                 if title and title not in ("Google Drive", "Google Drive: Sign-in", "Meet Google Drive – One place for all your files"):
+                    # Sanitize title to prevent Telegram Markdown parsing errors
+                    title = re.sub(r'[_*\[\]`]', '-', title)
                     logger.info(f"Successfully scraped GDrive name: '{title}' for ID {gdrive_id}")
                     return title
     except Exception as e:
         logger.warning(f"Could not scrape GDrive name for ID {gdrive_id}: {e}")
         
-    # Standard clean fallback
-    return f"{link_type}_{gdrive_id}"
+    # Standard clean fallback (using hyphen instead of underscore to prevent Markdown errors)
+    return f"{link_type}-{gdrive_id}"
 
 @admin_only
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles text messages, detects Google Drive links, and queues cloning tasks."""
-    if not update.message or not update.message.text:
+    if not update.message:
         return
 
-    text = update.message.text.strip()
+    text = update.message.text or update.message.caption
+    if not text:
+        return
+
+    text = text.strip()
     
     # Parse link
     parsed = parse_gdrive_link(text)
@@ -91,31 +98,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-    # Scrape actual file/folder name inside executor to avoid blocking the asyncio event loop
-    loop = asyncio.get_running_loop()
-    dest_name = await loop.run_in_executor(None, scrape_gdrive_name, link_type, gdrive_id)
+    try:
+        # Scrape actual file/folder name inside executor to avoid blocking the asyncio event loop
+        loop = asyncio.get_running_loop()
+        dest_name = await loop.run_in_executor(None, scrape_gdrive_name, link_type, gdrive_id)
 
-    # Add task to queue
-    task = await task_queue.add_task(user_id, text, gdrive_id, link_type, dest_name, status_msg)
-    
-    # Get queue position
-    pos = task_queue.get_queue_position(task.task_id)
-    
-    if pos > 0:
-        # Task is pending in queue
+        # Add task to queue
+        task = await task_queue.add_task(user_id, gdrive_id, link_type, dest_name, status_msg)
+        
+        # Get queue position
+        pos = task_queue.get_queue_position(task.task_id)
+        
+        if pos > 0:
+            # Task is pending in queue
+            await status_msg.edit_text(
+                f"📥 **Task Queued**\n"
+                f"📂 **Name**: `{dest_name}`\n"
+                f"🔗 **Type**: `{link_type.capitalize()}`\n"
+                f"📊 **Position in queue**: `{pos}`\n\n"
+                f"⚡ _Please wait, your task will start automatically..._",
+                parse_mode="Markdown"
+            )
+        else:
+            # Task is starting immediately
+            await status_msg.edit_text(
+                f"🌀 **Initializing Clone Task...**\n"
+                f"📂 **Name**: `{dest_name}`\n"
+                f"🔗 **Type**: `{link_type.capitalize()}`",
+                parse_mode="Markdown"
+            )
+    except Exception as e:
+        logger.exception(f"Unhandled error in clone handler: {e}")
         await status_msg.edit_text(
-            f"📥 **Task Queued**\n"
-            f"📂 **Name**: `{dest_name}`\n"
-            f"🔗 **Type**: `{link_type.capitalize()}`\n"
-            f"📊 **Position in queue**: `{pos}`\n\n"
-            f"⚡ _Please wait, your task will start automatically..._",
-            parse_mode="Markdown"
-        )
-    else:
-        # Task is starting immediately
-        await status_msg.edit_text(
-            f"🌀 **Initializing Clone Task...**\n"
-            f"📂 **Name**: `{dest_name}`\n"
-            f"🔗 **Type**: `{link_type.capitalize()}`",
+            f"❌ **Error Occurred:**\n`{str(e)}`\n\n_Please send this error screenshot to your developer._",
             parse_mode="Markdown"
         )

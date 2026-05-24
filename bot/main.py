@@ -21,6 +21,7 @@ from modules.commands import (
     cancel_command,
 )
 from modules.clone import handle_message
+from utils.keep_alive import keep_alive
 
 # Set up directories
 os.makedirs("logs", exist_ok=True)
@@ -85,12 +86,16 @@ def main():
     # 4. Register Message Handlers (specifically intercepting links or texts from Admins)
     application.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND, 
+            ~filters.COMMAND, 
             handle_message
         )
     )
 
-    # 5. Start Polling for updates
+    # 5. Start Keep-Alive Server (For Replit)
+    logger.info("Starting Keep-Alive web server...")
+    keep_alive()
+
+    # 6. Start Polling for updates
     logger.info("Bot is active and polling for updates... Press Ctrl+C to stop.")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

@@ -15,8 +15,7 @@ class CloneTask:
     def __init__(
         self, 
         user_id: int, 
-        url: str,
-        gdrive_id: str,
+        url: str, 
         link_type: str, 
         dest_name: str, 
         message: Message
@@ -24,7 +23,6 @@ class CloneTask:
         self.task_id = str(uuid.uuid4())[:8]  # Compact 8-char ID
         self.user_id = user_id
         self.url = url
-        self.gdrive_id = gdrive_id
         self.link_type = link_type
         self.dest_name = dest_name
         self.message = message  # Telegram message to edit with progress
@@ -55,14 +53,13 @@ class TaskQueue:
     async def add_task(
         self, 
         user_id: int, 
-        url: str,
-        gdrive_id: str,
+        url: str, 
         link_type: str, 
         dest_name: str, 
         message: Message
     ) -> CloneTask:
         """Adds a new cloning task to the queue."""
-        task = CloneTask(user_id, url, gdrive_id, link_type, dest_name, message)
+        task = CloneTask(user_id, url, link_type, dest_name, message)
         
         # Save to database
         db.add_task(task.task_id, user_id, url, link_type)
@@ -166,7 +163,7 @@ class TaskQueue:
             error_occurred = False
             error_msg = ""
             
-            async for update in run_rclone_task(task.link_type, task.gdrive_id, task.dest_name, task.task_id):
+            async for update in run_rclone_task(task.link_type, task.url, task.dest_name, task.task_id):
                 if not update:
                     continue
                 
@@ -182,45 +179,30 @@ class TaskQueue:
                         error_occurred = True
                         error_msg = update["error"]
                         break
-
+                        
                     task.progress.update(update)
-
+                    
                     # Update database periodically
                     db.update_task(task.task_id, {
                         "total_bytes": update.get("total_bytes", 0),
                         "transferred_bytes": update.get("transferred_bytes", 0),
                         "speed": update.get("speed", "0 B/s")
                     })
-
-                    # Throttle Telegram edits to prevent rate limits (max once every 2 seconds)
+                    
+                    # Throttle Telegram edits to prevent rate limits (max once every 4 seconds)
                     now = datetime.utcnow()
-                    if (now - last_update_time).total_seconds() >= 2.0:
-                        checks = update.get("checks", 0)
-                        transfers = update.get("transfers", 0)
-                        transferred_bytes = update.get("transferred_bytes", 0)
-                        is_scanning = transferred_bytes == 0 and checks > 0 and transfers == 0
-
-                        if is_scanning:
-                            progress_text = (
-                                f"🔍 **Scanning Files...**\n"
-                                f"📂 **Name**: `{task.dest_name}`\n"
-                                f"🔗 **Type**: `{task.link_type.capitalize()}`\n\n"
-                                f"├─ 📋 **Files scanned**: `{checks}`\n"
-                                f"└─ ⏳ **Please wait...**\n\n"
-                                f"🚫 Use `/cancel` to stop this task."
-                            )
-                        else:
-                            progress_bar = build_progress_bar(update["percentage"])
-                            progress_text = (
-                                f"🌀 **Cloning Content...**\n"
-                                f"📂 **Name**: `{task.dest_name}`\n\n"
-                                f"├─ {progress_bar} ({update['percentage']:.1f}%)\n"
-                                f"├─ ⚡ **Speed**: `{update['speed']}`\n"
-                                f"├─ 📦 **Transferred**: `{update['transferred']} / {update['total']}`\n"
-                                f"├─ ⏳ **ETA**: `{update['eta']}`\n"
-                                f"└─ 📄 **Active**: `{update['active_file']}`\n\n"
-                                f"🚫 Use `/cancel` to stop this task."
-                            )
+                    if (now - last_update_time).total_seconds() >= 4.0:
+                        progress_bar = build_progress_bar(update["percentage"])
+                        progress_text = (
+                            f"🌀 **Cloning Content...**\n"
+                            f"📂 **Name**: `{task.dest_name}`\n\n"
+                            f"├─ {progress_bar} ({update['percentage']:.1f}%)\n"
+                            f"├─ ⚡ **Speed**: `{update['speed']}`\n"
+                            f"├─ 📦 **Transferred**: `{update['transferred']} / {update['total']}`\n"
+                            f"├─ ⏳ **ETA**: `{update['eta']}`\n"
+                            f"└─ 📄 **Active**: `{update['active_file']}`\n\n"
+                            f"🚫 Use `/cancel` to stop this task."
+                        )
                         await self._safe_edit_message(task.message, progress_text)
                         last_update_time = now
 
@@ -297,17 +279,8 @@ class TaskQueue:
         try:
             await message.edit_text(text, parse_mode="Markdown")
         except TelegramError as e:
-            err_str = str(e)
-            if "Message is not modified" in err_str:
-                return
-            # If Markdown parsing failed, retry as plain text
-            if "can't parse" in err_str.lower() or "parse" in err_str.lower():
-                try:
-                    plain = text.replace("**", "").replace("`", "").replace("_", "")
-                    await message.edit_text(plain)
-                except TelegramError:
-                    pass
-            else:
+            # Handle rate limiting or message content unchanged errors
+            if "Message is not modified" not in str(e):
                 logger.error(f"Telegram error editing message: {e}")
 
 # Global task queue instance

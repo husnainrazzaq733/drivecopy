@@ -135,24 +135,13 @@ def parse_rclone_log_line(line: str) -> Optional[Dict]:
             "time": data.get("time", "")
         }
     except json.JSONDecodeError:
-        # Plain-text rclone log format: "YYYY/MM/DD HH:MM:SS LEVEL  : message"
-        stripped = line.strip()
-        import re as _re
-        m = _re.match(r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} (INFO|NOTICE|WARNING|ERROR|CRITICAL|DEBUG)\s*:?\s*(.*)', stripped)
-        if m:
-            raw_level = m.group(1).upper()
-            msg = m.group(2).strip()
-            level = "error" if raw_level in ("ERROR", "CRITICAL") else "info"
-            return {
-                "is_stats": False,
-                "level": level,
-                "msg": msg,
-                "time": ""
-            }
-        # Unknown non-JSON line — only treat as error if it looks like one
-        if any(w in stripped.lower() for w in ("error", "fatal", "critical", "failed", "didn't")):
-            return {"is_stats": False, "level": "error", "msg": stripped, "time": ""}
-        return {"is_stats": False, "level": "info", "msg": stripped, "time": ""}
+        # Non-JSON line (Rclone might output simple text on critical start error)
+        return {
+            "is_stats": False,
+            "level": "error",
+            "msg": line.strip(),
+            "time": ""
+        }
     except Exception as e:
         logger.error(f"Error parsing log line: {e}")
         return None
