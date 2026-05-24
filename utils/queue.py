@@ -240,6 +240,7 @@ class TaskQueue:
             f"📂 **Name**: `{task.dest_name}`\n"
             f"🔗 **Type**: `{task.link_type.capitalize()}`\n"
             f"📦 **Total Transferred**: `{task.progress.get('transferred', 'Unknown')}`\n"
+            f"🔍 **Files Checked/Skipped**: `{task.progress.get('checks', 0)}`\n"
             f"⏱️ **Total Time**: {int((datetime.utcnow() - task.created_at).total_seconds())}s"
         )
         await self._safe_edit_message(task.message, success_text)

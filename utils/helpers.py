@@ -105,6 +105,7 @@ def parse_rclone_log_line(line: str) -> Optional[Dict]:
             transferred = stats.get("bytes", 0)
             total = stats.get("totalBytes", 0)
             eta = stats.get("eta")
+            checks = stats.get("checks", 0)
             
             # Active file name detection from 'transferring' array
             active_file = "Calculating..."
@@ -124,6 +125,7 @@ def parse_rclone_log_line(line: str) -> Optional[Dict]:
                 "eta_raw": eta,
                 "eta": format_eta(eta) if eta is not None else "Unknown",
                 "active_file": active_file,
+                "checks": checks,
                 "is_stats": True
             }
             
