@@ -162,15 +162,23 @@ class TaskQueue:
             # Start Rclone async generator
             error_occurred = False
             error_msg = ""
+            last_logs = []
             
             async for update in run_rclone_task(task.link_type, task.url, task.dest_name, task.task_id):
                 if not update:
                     continue
                 
-                if not update.get("is_stats") and update.get("level") == "error":
-                    error_occurred = True
-                    error_msg = update.get("msg", "Unknown error")
-                    continue
+                if not update.get("is_stats"):
+                    msg = update.get("msg", "")
+                    if msg:
+                        last_logs.append(str(msg))
+                        if len(last_logs) > 5:
+                            last_logs.pop(0)
+                            
+                    if update.get("level") == "error":
+                        error_occurred = True
+                        error_msg = msg if msg else "Unknown error"
+                        continue
                 
                 # We received standard statistics update
                 if update.get("is_stats"):
@@ -211,7 +219,7 @@ class TaskQueue:
                 if error_occurred:
                     await self._handle_failed_task(task, error_msg)
                 else:
-                    await self._handle_completed_task(task)
+                    await self._handle_completed_task(task, last_logs)
             elif task.status == "canceled":
                 canceled_text = (
                     f"❌ **Task Canceled Successfully**\n"
@@ -228,7 +236,7 @@ class TaskQueue:
             logger.exception(f"Error processing task {task.task_id}: {e}")
             await self._handle_failed_task(task, str(e))
 
-    async def _handle_completed_task(self, task: CloneTask):
+    async def _handle_completed_task(self, task: CloneTask, last_logs: List[str]):
         task.status = "completed"
         db.update_task(task.task_id, {
             "status": "completed",
@@ -243,6 +251,13 @@ class TaskQueue:
             f"🔍 **Files Checked/Skipped**: `{task.progress.get('checks', 0)}`\n"
             f"⏱️ **Total Time**: {int((datetime.utcnow() - task.created_at).total_seconds())}s"
         )
+        
+        transferred = task.progress.get('transferred', 'Unknown')
+        if transferred in ('0 B', 'Unknown') and last_logs:
+            logs_str = "\n".join(last_logs)
+            # Add logs to help debug silent errors from copyid or empty folders
+            success_text += f"\n\n⚠️ **Note:** 0 B transferred. Rclone Output:\n`{logs_str[-500:]}`"
+            
         await self._safe_edit_message(task.message, success_text)
         logger.info(f"Task {task.task_id} completed successfully.")
 

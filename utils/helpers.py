@@ -133,7 +133,7 @@ def parse_rclone_log_line(line: str) -> Optional[Dict]:
         return {
             "is_stats": False,
             "level": data.get("level", "info"),
-            "msg": data.get("msg", ""),
+            "msg": data.get("msg", str(data)),
             "time": data.get("time", "")
         }
     except json.JSONDecodeError:
