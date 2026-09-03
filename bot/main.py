@@ -73,7 +73,7 @@ def main():
     app.add_handler(MessageHandler(cancel_command, filters.command("cancel")))
 
     # 4. Register Message Handlers (specifically intercepting links or texts from Admins)
-    app.add_handler(MessageHandler(handle_message))
+    app.add_handler(MessageHandler(handle_message, ~filters.command))
 
     # Start background task queue
     logger.info("Initializing background task queue...")
