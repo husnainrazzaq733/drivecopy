@@ -107,8 +107,7 @@ async def run_rclone_task(
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            text=True
+            stderr=asyncio.subprocess.STDOUT
         )
         
         # Register process for cancellation
@@ -117,10 +116,11 @@ async def run_rclone_task(
         # Read stdout line-by-line asynchronously
         # For standard text files, process.stdout.readline() returns a line
         while True:
-            line = await process.stdout.readline()
-            if not line:
+            line_bytes = await process.stdout.readline()
+            if not line_bytes:
                 break
             
+            line = line_bytes.decode('utf-8', errors='ignore').strip()
             parsed = parse_rclone_log_line(line)
             if parsed:
                 # If it has error levels or is standard output
