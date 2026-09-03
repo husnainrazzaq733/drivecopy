@@ -70,7 +70,20 @@ async def run_rclone_task(
             "--stats", "2s",
             "--stats-log-level", "NOTICE"
         ]
-    else:  # file
+    elif link_type == "local_file":
+        # Copies a local file to the destination folder
+        src = gdrive_id  # In this case, gdrive_id contains the local file path
+        dest = f"{settings.REMOTE_NAME}:{settings.DEST_PATH}"
+        cmd = [
+            "rclone", "copy", src, dest,
+            "--config", settings.RCLONE_CONFIG_PATH,
+            "--transfers", "8",
+            "--checkers", "16",
+            "--use-json-log",
+            "--stats", "2s",
+            "--stats-log-level", "NOTICE"
+        ]
+    else:  # file (Google Drive file)
         # copyid copies a file by ID to the destination directory
         dest_dir = f"{settings.DEST_PATH}/"
         cmd = [

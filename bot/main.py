@@ -2,14 +2,9 @@ import os
 import sys
 import logging
 from logging.handlers import RotatingFileHandler
-from telegram import Update
-from telegram.ext import (
-    Application,
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    filters,
-)
+from pyrogram import Client, filters
+from pyrogram.handlers import MessageHandler
+
 from config.settings import settings
 from utils.queue import task_queue
 from utils.rclone import check_rclone_installed
@@ -44,14 +39,8 @@ logging.basicConfig(
 
 logger = logging.getLogger("bot.main")
 
-async def post_init(application: Application) -> None:
-    """This function is called by the application after initialization but before starting."""
-    logger.info("Initializing background task queue...")
-    task_queue.start()
-    logger.info("Background task queue successfully started.")
-
 def main():
-    """Main entry point to bootstrap the Telegram Bot."""
+    """Main entry point to bootstrap the Telegram Bot using Pyrogram."""
     logger.info("==============================================")
     logger.info("    Starting GDrive Rclone Telegram Bot...    ")
     logger.info("==============================================")
@@ -68,28 +57,27 @@ def main():
     logger.info(f"Target Google Drive Destination: '{settings.DRIVE_DESTINATION}'")
     logger.info(f"Configured Authorized Admins: {settings.ADMIN_IDS}")
 
-    # 2. Build the Telegram Application
-    application = (
-        ApplicationBuilder()
-        .token(settings.BOT_TOKEN)
-        .post_init(post_init)
-        .build()
+    # 2. Build the Pyrogram Client
+    app = Client(
+        "drive_bot",
+        api_id=settings.API_ID,
+        api_hash=settings.API_HASH,
+        bot_token=settings.BOT_TOKEN,
     )
 
     # 3. Register Command Handlers
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("ping", ping_command))
-    application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("cancel", cancel_command))
+    app.add_handler(MessageHandler(start_command, filters.command("start")))
+    app.add_handler(MessageHandler(help_command, filters.command("help")))
+    app.add_handler(MessageHandler(ping_command, filters.command("ping")))
+    app.add_handler(MessageHandler(stats_command, filters.command("stats")))
+    app.add_handler(MessageHandler(cancel_command, filters.command("cancel")))
 
     # 4. Register Message Handlers (specifically intercepting links or texts from Admins)
-    application.add_handler(
-        MessageHandler(
-            ~filters.COMMAND, 
-            handle_message
-        )
-    )
+    app.add_handler(MessageHandler(handle_message, ~filters.command))
+
+    # Start background task queue
+    logger.info("Initializing background task queue...")
+    task_queue.start()
 
     # 5. Start Keep-Alive Server (For Replit)
     logger.info("Starting Keep-Alive web server...")
@@ -97,7 +85,7 @@ def main():
 
     # 6. Start Polling for updates
     logger.info("Bot is active and polling for updates... Press Ctrl+C to stop.")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run()
 
 if __name__ == "__main__":
     main()

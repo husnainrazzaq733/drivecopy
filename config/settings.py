@@ -7,10 +7,18 @@ load_dotenv()
 
 class Settings:
     def __init__(self):
-        # 1. Telegram Bot Token
+        # 1. Telegram Bot Token & API Details
         self.BOT_TOKEN = os.getenv("BOT_TOKEN")
         if not self.BOT_TOKEN:
             raise ValueError("BOT_TOKEN environment variable is required!")
+            
+        self.API_ID = int(os.getenv("API_ID", 0))
+        if not self.API_ID:
+            raise ValueError("API_ID environment variable is required!")
+            
+        self.API_HASH = os.getenv("API_HASH")
+        if not self.API_HASH:
+            raise ValueError("API_HASH environment variable is required!")
 
         # 2. Admin ID(s)
         admin_id_raw = os.getenv("ADMIN_ID")

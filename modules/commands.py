@@ -1,8 +1,8 @@
 import time
 import logging
 from datetime import datetime
-from telegram import Update
-from telegram.ext import ContextTypes
+from pyrogram import Client
+from pyrogram.types import Message
 from config.settings import settings
 from utils.database import db
 from utils.queue import task_queue
@@ -12,21 +12,21 @@ logger = logging.getLogger("bot.commands")
 
 def admin_only(func):
     """Decorator to restrict commands to users configured in ADMIN_IDS."""
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        if not update.effective_user or not update.message:
+    async def wrapper(client: Client, message: Message, *args, **kwargs):
+        if not message.from_user:
             return
-        user_id = update.effective_user.id
+        user_id = message.from_user.id
         if user_id not in settings.ADMIN_IDS:
             logger.warning(f"Unauthorized access attempt by User ID {user_id}")
-            await update.message.reply_text("❌ **Access Denied!**\nYou are not authorized to use this bot.")
+            await message.reply_text("❌ **Access Denied!**\nYou are not authorized to use this bot.")
             return
-        return await func(update, context, *args, **kwargs)
+        return await func(client, message, *args, **kwargs)
     return wrapper
 
 @admin_only
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_command(client: Client, message: Message):
     """Sends greeting message to admin."""
-    user = update.effective_user
+    user = message.from_user
     welcome_text = (
         f"👋 **Hello, {user.first_name}!**\n\n"
         f"🤖 Welcome to **GDrive Rclone Cloner Bot**.\n"
@@ -41,10 +41,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"└─ `/cancel` - Cancel your running clone task\n\n"
         f"⚡ _Status: Operational & Ready!_"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    await message.reply_text(welcome_text)
 
 @admin_only
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(client: Client, message: Message):
     """Sends help instructions to admin."""
     help_text = (
         f"📖 **GDrive Cloner Bot Guide**\n\n"
@@ -62,18 +62,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🚫 **Task Cancellation**:\n"
         f"If you send a wrong link or want to stop a transfer, type `/cancel`. The active task will be killed safely and the next queued task will start."
     )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+    await message.reply_text(help_text)
 
 @admin_only
-async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def ping_command(client: Client, message: Message):
     """Checks latency/ping."""
     start_time = time.time()
-    msg = await update.message.reply_text("🏓 **Pinging server...**", parse_mode="Markdown")
+    msg = await message.reply_text("🏓 **Pinging server...**")
     latency = (time.time() - start_time) * 1000
-    await msg.edit_text(f"🏓 **Pong!**\n⚡ Latency: `{latency:.1f} ms`", parse_mode="Markdown")
+    await msg.edit_text(f"🏓 **Pong!**\n⚡ Latency: `{latency:.1f} ms`")
 
 @admin_only
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def stats_command(client: Client, message: Message):
     """Fetches and displays task database and queue status."""
     # Get database records stats
     db_stats = db.get_stats()
@@ -103,22 +103,22 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"├─ **Canceled**: `{db_stats['canceled']}`\n"
         f"└─ **Total Transferred**: `{format_bytes(db_stats['total_transferred_bytes'])}`"
     )
-    await update.message.reply_text(stats_text, parse_mode="Markdown")
+    await message.reply_text(stats_text)
 
 @admin_only
-async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cancel_command(client: Client, message: Message):
     """Cancels the active or queued task for the user."""
-    user_id = update.effective_user.id
+    user_id = message.from_user.id
     user_tasks = task_queue.get_user_tasks(user_id)
     
     if not user_tasks:
-        await update.message.reply_text("❌ You have no active or pending clone tasks.")
+        await message.reply_text("❌ You have no active or pending clone tasks.")
         return
         
     # Cancel the first active/pending task found
     task_to_cancel = user_tasks[0]
-    await update.message.reply_text(f"⏳ Attempting to cancel task `{task_to_cancel.task_id}` (`{task_to_cancel.dest_name}`)...")
+    await message.reply_text(f"⏳ Attempting to cancel task `{task_to_cancel.task_id}` (`{task_to_cancel.dest_name}`)...")
     
     canceled = await task_queue.cancel_task(task_to_cancel.task_id, user_id)
     if not canceled:
-        await update.message.reply_text("❌ Failed to cancel task. It might have already finished.")
+        await message.reply_text("❌ Failed to cancel task. It might have already finished.")

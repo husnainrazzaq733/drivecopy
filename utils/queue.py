@@ -3,11 +3,11 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
-from telegram import Message
-from telegram.error import TelegramError
+from pyrogram.types import Message
+from pyrogram.errors import MessageNotModified
 from utils.database import db
 from utils.rclone import run_rclone_task, cancel_rclone_task
-from utils.helpers import build_progress_bar
+from utils.helpers import build_progress_bar, format_bytes
 
 logger = logging.getLogger("bot.queue")
 
@@ -149,15 +149,66 @@ class TaskQueue:
         db.update_task(task.task_id, {"status": "running"})
 
         last_update_time = datetime.utcnow()
+        local_file_path = None
         try:
             # Send initial progress message
             initial_text = (
                 f"⚡ **Task Started**\n"
                 f"📂 **Name**: `{task.dest_name}`\n"
                 f"🔗 **Type**: `{task.link_type.capitalize()}`\n"
-                f"⏳ **Status**: Initializing Rclone..."
+                f"⏳ **Status**: Initializing..."
             )
             await self._safe_edit_message(task.message, initial_text)
+
+            # Handle Telegram file downloads
+            if task.link_type == "telegram_file":
+                await self._safe_edit_message(
+                    task.message, 
+                    f"⚡ **Task Started**\n"
+                    f"📂 **Name**: `{task.dest_name}`\n"
+                    f"⏳ **Status**: Downloading to server..."
+                )
+                import os
+                import tempfile
+                # Setup temp path
+                temp_dir = tempfile.gettempdir()
+                local_file_path = os.path.join(temp_dir, f"{task.task_id}_{task.dest_name}")
+                
+                # Download
+                try:
+                    async def progress_callback(current, total, message, dest_name):
+                        now = datetime.utcnow()
+                        # Use self._safe_edit_message indirectly or directly? This is inside _process_task
+                        # We throttle to 3 seconds
+                        nonlocal last_update_time
+                        if (now - last_update_time).total_seconds() >= 3.0:
+                            percentage = (current / total) * 100 if total else 0
+                            prog_bar = build_progress_bar(percentage)
+                            text = (
+                                f"⚡ **Task Started**\n"
+                                f"📂 **Name**: `{dest_name}`\n"
+                                f"⏳ **Status**: Downloading to server...\n"
+                                f"├─ {prog_bar} ({percentage:.1f}%)\n"
+                                f"└─ 📦 **Transferred**: `{format_bytes(current)} / {format_bytes(total)}`"
+                            )
+                            # Ensure we don't block the progress callback
+                            asyncio.create_task(self._safe_edit_message(message, text))
+                            last_update_time = now
+
+                    client = task.message._client
+                    await client.download_media(
+                        message=task.url,
+                        file_name=local_file_path,
+                        progress=progress_callback,
+                        progress_args=(task.message, task.dest_name)
+                    )
+                    
+                    # Update task details for rclone
+                    task.url = local_file_path
+                    task.link_type = "local_file"
+                except Exception as e:
+                    logger.error(f"Failed to download Telegram file: {e}")
+                    raise Exception(f"Failed to download file from Telegram: {e}")
 
             # Start Rclone async generator
             error_occurred = False
@@ -235,6 +286,13 @@ class TaskQueue:
         except Exception as e:
             logger.exception(f"Error processing task {task.task_id}: {e}")
             await self._handle_failed_task(task, str(e))
+        finally:
+            if local_file_path and os.path.exists(local_file_path):
+                try:
+                    os.remove(local_file_path)
+                    logger.info(f"Cleaned up temporary file: {local_file_path}")
+                except Exception as e:
+                    logger.error(f"Failed to clean up temporary file {local_file_path}: {e}")
 
     async def _handle_completed_task(self, task: CloneTask, last_logs: List[str]):
         task.status = "completed"
@@ -293,11 +351,11 @@ class TaskQueue:
     async def _safe_edit_message(self, message: Message, text: str):
         """Safely edits a Telegram message, catching common API exceptions."""
         try:
-            await message.edit_text(text, parse_mode="Markdown")
-        except TelegramError as e:
-            # Handle rate limiting or message content unchanged errors
-            if "Message is not modified" not in str(e):
-                logger.error(f"Telegram error editing message: {e}")
+            await message.edit_text(text)
+        except MessageNotModified:
+            pass
+        except Exception as e:
+            logger.error(f"Telegram error editing message: {e}")
 
 # Global task queue instance
 task_queue = TaskQueue()

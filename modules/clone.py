@@ -3,8 +3,8 @@ import logging
 import urllib.request
 import urllib.error
 import asyncio
-from telegram import Update
-from telegram.ext import ContextTypes
+from pyrogram import Client
+from pyrogram.types import Message
 from config.settings import settings
 from modules.commands import admin_only
 from utils.helpers import parse_gdrive_link
@@ -54,12 +54,73 @@ def scrape_gdrive_name(link_type: str, gdrive_id: str) -> str:
     return f"{link_type}-{gdrive_id}"
 
 @admin_only
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles text messages, detects Google Drive links, and queues cloning tasks."""
-    if not update.message:
+async def handle_message(client: Client, message: Message):
+    """Handles text messages and files, detects Google Drive links, and queues cloning tasks."""
+    # Check for direct file uploads
+    file_obj = None
+    file_name = None
+    
+    if message.document:
+        file_obj = message.document
+        file_name = file_obj.file_name
+    elif message.video:
+        file_obj = message.video
+        file_name = file_obj.file_name or "video.mp4"
+    elif message.audio:
+        file_obj = message.audio
+        file_name = file_obj.file_name or "audio.mp3"
+    elif message.photo:
+        file_obj = message.photo
+        file_name = "photo.jpg"
+
+    if file_obj:
+        file_id = file_obj.file_id
+        # Size limit check (2GB for bots using Pyrogram)
+        if hasattr(file_obj, 'file_size') and file_obj.file_size and file_obj.file_size > 2000 * 1024 * 1024:
+            await message.reply_text(
+                "❌ **File too large!**\n"
+                "The bot can only download files up to 2GB from Telegram. "
+                "For larger files, please provide a Google Drive link."
+            )
+            return
+
+        user_id = message.from_user.id
+        user_tasks = task_queue.get_user_tasks(user_id)
+        if len(user_tasks) >= 3:
+            await message.reply_text(
+                "⚠️ **Queue Limit Exceeded!**\n"
+                "You already have 3 active or pending tasks. "
+                "Please wait for them to finish or cancel one with `/cancel`."
+            )
+            return
+
+        status_msg = await message.reply_text("⏳ **Queuing Telegram file...**")
+        
+        try:
+            # We use link_type = "telegram_file", url = file_id (which Pyrogram uses)
+            task = await task_queue.add_task(user_id, file_id, "telegram_file", file_name, status_msg)
+            pos = task_queue.get_queue_position(task.task_id)
+            if pos > 0:
+                await status_msg.edit_text(
+                    f"📥 **Task Queued**\n"
+                    f"📂 **Name**: `{file_name}`\n"
+                    f"🔗 **Type**: `Telegram File`\n"
+                    f"📊 **Position in queue**: `{pos}`\n\n"
+                    f"⚡ _Please wait, your task will start automatically..._"
+                )
+            else:
+                await status_msg.edit_text(
+                    f"🌀 **Initializing Upload Task...**\n"
+                    f"📂 **Name**: `{file_name}`\n"
+                    f"🔗 **Type**: `Telegram File`"
+                )
+        except Exception as e:
+            logger.exception(f"Unhandled error in file handler: {e}")
+            await status_msg.edit_text(f"❌ **Error Occurred:**\n`{str(e)}`")
         return
 
-    text = update.message.text or update.message.caption
+    # Fallback to Text processing (Google Drive Links)
+    text = message.text or message.caption
     if not text:
         return
 
@@ -68,68 +129,50 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Parse link
     parsed = parse_gdrive_link(text)
     if not parsed:
-        await update.message.reply_text(
-            "❌ **Invalid Google Drive Link!**\n\n"
-            "Please send a valid Google Drive file or folder link, e.g.:\n"
+        await message.reply_text(
+            "❌ **Invalid Google Drive Link or File!**\n\n"
+            "Please send a valid file directly, or a Google Drive link, e.g.:\n"
             "• `https://drive.google.com/file/d/FILE_ID/view`\n"
-            "• `https://drive.google.com/drive/folders/FOLDER_ID`",
-            parse_mode="Markdown"
+            "• `https://drive.google.com/drive/folders/FOLDER_ID`"
         )
         return
 
     link_type, gdrive_id = parsed
     
-    # Check if this link is already active or queued for this user
-    user_id = update.effective_user.id
+    user_id = message.from_user.id
     user_tasks = task_queue.get_user_tasks(user_id)
     
-    # Prevent user from submitting multiple parallel jobs to keep the server stable
     if len(user_tasks) >= 3:
-        await update.message.reply_text(
+        await message.reply_text(
             "⚠️ **Queue Limit Exceeded!**\n"
             "You already have 3 active or pending tasks. "
             "Please wait for them to finish or cancel one with `/cancel` before queueing more."
         )
         return
 
-    # Send initial queuing response
-    status_msg = await update.message.reply_text(
-        "⏳ **Fetching Google Drive metadata...**",
-        parse_mode="Markdown"
-    )
+    status_msg = await message.reply_text("⏳ **Fetching Google Drive metadata...**")
 
     try:
-        # Scrape actual file/folder name inside executor to avoid blocking the asyncio event loop
         loop = asyncio.get_running_loop()
         dest_name = await loop.run_in_executor(None, scrape_gdrive_name, link_type, gdrive_id)
 
-        # Add task to queue
         task = await task_queue.add_task(user_id, gdrive_id, link_type, dest_name, status_msg)
-        
-        # Get queue position
         pos = task_queue.get_queue_position(task.task_id)
         
         if pos > 0:
-            # Task is pending in queue
             await status_msg.edit_text(
                 f"📥 **Task Queued**\n"
                 f"📂 **Name**: `{dest_name}`\n"
                 f"🔗 **Type**: `{link_type.capitalize()}`\n"
                 f"📊 **Position in queue**: `{pos}`\n\n"
-                f"⚡ _Please wait, your task will start automatically..._",
-                parse_mode="Markdown"
+                f"⚡ _Please wait, your task will start automatically..._"
             )
         else:
-            # Task is starting immediately
             await status_msg.edit_text(
                 f"🌀 **Initializing Clone Task...**\n"
                 f"📂 **Name**: `{dest_name}`\n"
-                f"🔗 **Type**: `{link_type.capitalize()}`",
-                parse_mode="Markdown"
+                f"🔗 **Type**: `{link_type.capitalize()}`"
             )
     except Exception as e:
         logger.exception(f"Unhandled error in clone handler: {e}")
-        await status_msg.edit_text(
-            f"❌ **Error Occurred:**\n`{str(e)}`\n\n_Please send this error screenshot to your developer._",
-            parse_mode="Markdown"
-        )
+        await status_msg.edit_text(f"❌ **Error Occurred:**\n`{str(e)}`")
