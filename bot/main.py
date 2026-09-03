@@ -39,7 +39,10 @@ logging.basicConfig(
 
 logger = logging.getLogger("bot.main")
 
-def main():
+from pyrogram import idle
+import asyncio
+
+async def async_main():
     """Main entry point to bootstrap the Telegram Bot using Pyrogram."""
     logger.info("==============================================")
     logger.info("    Starting GDrive Rclone Telegram Bot...    ")
@@ -73,7 +76,7 @@ def main():
     app.add_handler(MessageHandler(cancel_command, filters.command("cancel")))
 
     # 4. Register Message Handlers (specifically intercepting links or texts from Admins)
-    app.add_handler(MessageHandler(handle_message, ~filters.command))
+    app.add_handler(MessageHandler(handle_message))
 
     # Start background task queue
     logger.info("Initializing background task queue...")
@@ -85,7 +88,9 @@ def main():
 
     # 6. Start Polling for updates
     logger.info("Bot is active and polling for updates... Press Ctrl+C to stop.")
-    app.run()
+    await app.start()
+    await idle()
+    await app.stop()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(async_main())
