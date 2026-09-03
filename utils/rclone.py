@@ -36,7 +36,8 @@ async def run_rclone_task(
     link_type: str, 
     gdrive_id: str, 
     dest_name: str, 
-    task_id: str
+    task_id: str,
+    target_folder: str
 ) -> AsyncGenerator[Dict, None]:
     """
     Asynchronously runs Rclone to copy/clone a GDrive file or folder.
@@ -61,10 +62,10 @@ async def run_rclone_task(
         src = f"{settings.REMOTE_NAME},root_folder_id={gdrive_id}:"
         
         # If destination doesn't end with colon (it has a path), we append /dest_name
-        if settings.CURRENT_DESTINATION.endswith(":"):
-            dest = f"{settings.CURRENT_DESTINATION}{dest_name}"
+        if target_folder.endswith(":"):
+            dest = f"{target_folder}{dest_name}"
         else:
-            dest = f"{settings.CURRENT_DESTINATION}/{dest_name}"
+            dest = f"{target_folder}/{dest_name}"
             
         cmd = [
             "rclone", "copy", src, dest,
@@ -79,7 +80,7 @@ async def run_rclone_task(
     elif link_type == "local_file":
         # Copies a local file to the destination folder
         src = gdrive_id  # In this case, gdrive_id contains the local file path
-        dest = settings.CURRENT_DESTINATION
+        dest = target_folder
         cmd = [
             "rclone", "copy", src, dest,
             "--config", settings.RCLONE_CONFIG_PATH,
@@ -93,7 +94,7 @@ async def run_rclone_task(
         # copyid copies a file by ID to the destination directory
         # copyid expects only the path part after the remote name
         remote_name = settings.DRIVE_REMOTE_NAME
-        dest_dir = settings.CURRENT_DESTINATION[len(remote_name):]
+        dest_dir = target_folder[len(remote_name):]
         if not dest_dir:
             dest_dir = "/"
         else:

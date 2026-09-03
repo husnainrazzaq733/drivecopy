@@ -28,6 +28,7 @@ class CloneTask:
         self.message = message  # Telegram message to edit with progress
         self.status = "pending"
         self.created_at = datetime.utcnow()
+        self.target_folder = ""
         self.progress: Dict = {
             "percentage": 0.0,
             "speed": "0 B/s",
@@ -59,7 +60,9 @@ class TaskQueue:
         message: Message
     ) -> CloneTask:
         """Adds a new cloning task to the queue."""
+        from config.settings import settings
         task = CloneTask(user_id, url, link_type, dest_name, message)
+        task.target_folder = settings.CURRENT_DESTINATION
         
         # Save to database
         db.add_task(task.task_id, user_id, url, link_type)
@@ -215,7 +218,7 @@ class TaskQueue:
             error_msg = ""
             last_logs = []
             
-            async for update in run_rclone_task(task.link_type, task.url, task.dest_name, task.task_id):
+            async for update in run_rclone_task(task.link_type, task.url, task.dest_name, task.task_id, task.target_folder):
                 if not update:
                     continue
                 
@@ -303,8 +306,9 @@ class TaskQueue:
         
         success_text = (
             f"✅ **Cloning Completed!**\n"
-            f"📂 **Name**: `{task.dest_name}`\n"
+            f"📁 **Name**: `{task.dest_name}`\n"
             f"🔗 **Type**: `{task.link_type.capitalize()}`\n"
+            f"📂 **Destination**: `{task.target_folder}`\n"
             f"📦 **Total Transferred**: `{task.progress.get('transferred', 'Unknown')}`\n"
             f"🔍 **Files Checked/Skipped**: `{task.progress.get('checks', 0)}`\n"
             f"⏱️ **Total Time**: {int((datetime.utcnow() - task.created_at).total_seconds())}s"
