@@ -56,6 +56,12 @@ def scrape_gdrive_name(link_type: str, gdrive_id: str) -> str:
 @admin_only
 async def handle_message(client: Client, message: Message):
     """Handles text messages and files, detects Google Drive links, and queues cloning tasks."""
+    # Ignore commands since we removed the ~filters.command from main.py
+    if message.text and message.text.startswith('/'):
+        return
+    if message.caption and message.caption.startswith('/'):
+        return
+
     # Check for direct file uploads
     file_obj = None
     file_name = None
