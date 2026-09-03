@@ -78,7 +78,7 @@ async def async_main():
     app.add_handler(MessageHandler(setfolder_command, filters.command("setfolder")))
 
     # 4. Register Message Handlers (specifically intercepting links or texts from Admins)
-    app.add_handler(MessageHandler(handle_message, ~filters.command))
+    app.add_handler(MessageHandler(handle_message))
 
     # Start background task queue
     logger.info("Initializing background task queue...")
