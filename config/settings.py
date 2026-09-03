@@ -42,12 +42,15 @@ class Settings:
 
         # 3. Drive Destination
         self.DRIVE_DESTINATION = os.getenv("DRIVE_DESTINATION")
-        if not self.DRIVE_DESTINATION:
-            raise ValueError("DRIVE_DESTINATION environment variable is required (e.g. gdrive:cloned_files)!")
-        
-        if ":" not in self.DRIVE_DESTINATION:
+        if not self.DRIVE_DESTINATION or ":" not in self.DRIVE_DESTINATION:
             raise ValueError("DRIVE_DESTINATION must be in the format 'remote_name:path' (e.g., 'gdrive:cloned_files')!")
+
+        # The base remote name (e.g. 'fastDrive:')
+        self.DRIVE_REMOTE_NAME = self.DRIVE_DESTINATION.split(':')[0] + ':'
         
+        # This will hold the dynamic destination folder. By default, it's the environment variable's value.
+        self.CURRENT_DESTINATION = self.DRIVE_DESTINATION
+
         self.REMOTE_NAME = self.DRIVE_DESTINATION.split(":")[0]
         self.DEST_PATH = self.DRIVE_DESTINATION.split(":", 1)[1]
 

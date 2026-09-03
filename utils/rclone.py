@@ -59,7 +59,13 @@ async def run_rclone_task(
     if link_type == "folder":
         # Copies folder contents into a subfolder named dest_name
         src = f"{settings.REMOTE_NAME},root_folder_id={gdrive_id}:"
-        dest = f"{settings.REMOTE_NAME}:{settings.DEST_PATH}/{dest_name}"
+        
+        # If destination doesn't end with colon (it has a path), we append /dest_name
+        if settings.CURRENT_DESTINATION.endswith(":"):
+            dest = f"{settings.CURRENT_DESTINATION}{dest_name}"
+        else:
+            dest = f"{settings.CURRENT_DESTINATION}/{dest_name}"
+            
         cmd = [
             "rclone", "copy", src, dest,
             "--config", settings.RCLONE_CONFIG_PATH,
@@ -73,7 +79,7 @@ async def run_rclone_task(
     elif link_type == "local_file":
         # Copies a local file to the destination folder
         src = gdrive_id  # In this case, gdrive_id contains the local file path
-        dest = f"{settings.REMOTE_NAME}:{settings.DEST_PATH}"
+        dest = settings.CURRENT_DESTINATION
         cmd = [
             "rclone", "copy", src, dest,
             "--config", settings.RCLONE_CONFIG_PATH,
@@ -85,10 +91,17 @@ async def run_rclone_task(
         ]
     else:  # file (Google Drive file)
         # copyid copies a file by ID to the destination directory
-        dest_dir = f"{settings.DEST_PATH}/"
+        # copyid expects only the path part after the remote name
+        remote_name = settings.DRIVE_REMOTE_NAME
+        dest_dir = settings.CURRENT_DESTINATION[len(remote_name):]
+        if not dest_dir:
+            dest_dir = "/"
+        else:
+            dest_dir = f"{dest_dir}/"
+            
         cmd = [
             "rclone", "backend", "copyid",
-            f"{settings.REMOTE_NAME}:",
+            remote_name,
             gdrive_id,
             dest_dir,
             "--config", settings.RCLONE_CONFIG_PATH,

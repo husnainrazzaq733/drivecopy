@@ -14,6 +14,7 @@ from modules.commands import (
     ping_command,
     stats_command,
     cancel_command,
+    setfolder_command,
 )
 from modules.clone import handle_message
 from utils.keep_alive import keep_alive
@@ -74,9 +75,10 @@ async def async_main():
     app.add_handler(MessageHandler(ping_command, filters.command("ping")))
     app.add_handler(MessageHandler(stats_command, filters.command("stats")))
     app.add_handler(MessageHandler(cancel_command, filters.command("cancel")))
+    app.add_handler(MessageHandler(setfolder_command, filters.command("setfolder")))
 
     # 4. Register Message Handlers (specifically intercepting links or texts from Admins)
-    app.add_handler(MessageHandler(handle_message))
+    app.add_handler(MessageHandler(handle_message, ~filters.command))
 
     # Start background task queue
     logger.info("Initializing background task queue...")

@@ -18,7 +18,7 @@ def admin_only(func):
         user_id = message.from_user.id
         if user_id not in settings.ADMIN_IDS:
             logger.warning(f"Unauthorized access attempt by User ID {user_id}")
-            await message.reply_text("❌ **Access Denied!**\nYou are not authorized to use this bot.")
+            await message.reply_text("? **Access Denied!**\nYou are not authorized to use this bot.")
             return
         return await func(client, message, *args, **kwargs)
     return wrapper
@@ -28,18 +28,19 @@ async def start_command(client: Client, message: Message):
     """Sends greeting message to admin."""
     user = message.from_user
     welcome_text = (
-        f"👋 **Hello, {user.first_name}!**\n\n"
-        f"🤖 Welcome to **GDrive Rclone Cloner Bot**.\n"
+        f"?? **Hello, {user.first_name}!**\n\n"
+        f"?? Welcome to **GDrive Rclone Cloner Bot**.\n"
         f"This bot allows you to clone Google Drive files and folders server-side to your own Google Drive using Rclone.\n\n"
-        f"ℹ️ **How to use**:\n"
+        f"?? **How to use**:\n"
         f"Simply send or forward any Google Drive link to this chat (files or folders). The bot will detect the type and start cloning immediately!\n\n"
-        f"📌 **Available Commands**:\n"
-        f"├─ `/start` - Restart / Greeting\n"
-        f"├─ `/help` - View detailed usage guide\n"
-        f"├─ `/ping` - Check server latency\n"
-        f"├─ `/stats` - Check database and queue stats\n"
-        f"└─ `/cancel` - Cancel your running clone task\n\n"
-        f"⚡ _Status: Operational & Ready!_"
+        f"?? **Available Commands**:\n"
+        f"+- /start - Restart / Greeting\n"
+        f"+- /help - View detailed usage guide\n"
+        f"+- /ping - Check server latency\n"
+        f"+- /stats - Check database and queue stats\n"
+        f"+- /cancel - Cancel your running clone task\n"
+        f"+- /setfolder - Set the destination folder for uploads\n\n"
+        f"? _Status: Operational & Ready!_"
     )
     await message.reply_text(welcome_text)
 
@@ -47,20 +48,20 @@ async def start_command(client: Client, message: Message):
 async def help_command(client: Client, message: Message):
     """Sends help instructions to admin."""
     help_text = (
-        f"📖 **GDrive Cloner Bot Guide**\n\n"
+        f"?? **GDrive Cloner Bot Guide**\n\n"
         f"**1. Folder Cloning**:\n"
         f"Send a Google Drive folder link like:\n"
-        f"`https://drive.google.com/drive/folders/YOUR_FOLDER_ID`\n"
+        f"https://drive.google.com/drive/folders/YOUR_FOLDER_ID\n"
         f"The bot will create a folder in your destination Drive and copy all its contents server-side.\n\n"
         f"**2. File Cloning**:\n"
         f"Send a Google Drive file link like:\n"
-        f"`https://drive.google.com/file/d/YOUR_FILE_ID/view`\n"
+        f"https://drive.google.com/file/d/YOUR_FILE_ID/view\n"
         f"The bot will copy the file to your destination Drive.\n\n"
-        f"🚀 **Why Server-Side Copy?**\n"
-        f"By using `--drive-server-side-across-configs`, the copy happens directly inside Google's network. "
+        f"? **Why Server-Side Copy?**\n"
+        f"By using --drive-server-side-across-configs, the copy happens directly inside Google's network. "
         f"No data is downloaded to the bot's server, making it extremely fast (usually instant for single files, and multi-gigabyte folders copy in seconds!).\n\n"
-        f"🚫 **Task Cancellation**:\n"
-        f"If you send a wrong link or want to stop a transfer, type `/cancel`. The active task will be killed safely and the next queued task will start."
+        f"?? **Task Cancellation**:\n"
+        f"If you send a wrong link or want to stop a transfer, type /cancel <task_id>. The active task will be killed safely and the next queued task will start."
     )
     await message.reply_text(help_text)
 
@@ -68,57 +69,82 @@ async def help_command(client: Client, message: Message):
 async def ping_command(client: Client, message: Message):
     """Checks latency/ping."""
     start_time = time.time()
-    msg = await message.reply_text("🏓 **Pinging server...**")
+    msg = await message.reply_text("?? **Pinging server...**")
     latency = (time.time() - start_time) * 1000
-    await msg.edit_text(f"🏓 **Pong!**\n⚡ Latency: `{latency:.1f} ms`")
+    await msg.edit_text(f"?? **Pong!**\n? Latency: {latency:.1f} ms")
 
 @admin_only
 async def stats_command(client: Client, message: Message):
     """Fetches and displays task database and queue status."""
-    # Get database records stats
     db_stats = db.get_stats()
-    
-    # Get queue status
     queue_size = len(task_queue.pending_tasks)
     active_task = task_queue.active_task
     
-    active_status = "💤 Idle"
+    active_status = "??  Idle"
     if active_task:
         active_status = (
-            f"🌀 Running\n"
-            f"  └─ ID: `{active_task.task_id}`\n"
-            f"  └─ Name: `{active_task.dest_name}`\n"
-            f"  └─ Percentage: `{active_task.progress.get('percentage', 0.0):.1f}%`"
+            f"?? Running\n"
+            f"  +- ID: {active_task.task_id}\n"
+            f"  +- Name: {active_task.dest_name}\n"
+            f"  +- Percentage: {active_task.progress.get('percentage', 0.0):.1f}%"
         )
 
     stats_text = (
-        f"📊 **GDrive Cloner Stats**\n\n"
-        f"🖥️ **Task Queue Status**:\n"
-        f"├─ **Queue Size**: `{queue_size} pending`\n"
-        f"└─ **Active Task**: {active_status}\n\n"
-        f"🗄️ **Database Summary**:\n"
-        f"├─ **Total Tasks**: `{db_stats['total_tasks']}`\n"
-        f"├─ **Completed**: `{db_stats['completed']}`\n"
-        f"├─ **Failed**: `{db_stats['failed']}`\n"
-        f"├─ **Canceled**: `{db_stats['canceled']}`\n"
-        f"└─ **Total Transferred**: `{format_bytes(db_stats['total_transferred_bytes'])}`"
+        f"?? **GDrive Cloner Stats**\n\n"
+        f"?? **Task Queue Status**:\n"
+        f"+- **Queue Size**: {queue_size} pending\n"
+        f"+- **Active Task**: {active_status}\n\n"
+        f"??? **Database Summary**:\n"
+        f"+- **Total Tasks**: {db_stats['total_tasks']}\n"
+        f"+- **Completed**: {db_stats['completed']}\n"
+        f"+- **Failed**: {db_stats['failed']}\n"
+        f"+- **Canceled**: {db_stats['canceled']}\n"
+        f"+- **Total Transferred**: {format_bytes(db_stats['total_transferred_bytes'])}"
     )
     await message.reply_text(stats_text)
 
 @admin_only
 async def cancel_command(client: Client, message: Message):
-    """Cancels the active or queued task for the user."""
-    user_id = message.from_user.id
-    user_tasks = task_queue.get_user_tasks(user_id)
+    """Cancels a running cloning task."""
+    command_parts = message.text.split()
+    if len(command_parts) != 2:
+        await message.reply_text("Usage: /cancel <task_id>\n\nUse /stats to see active task IDs.")
+        return
+
+    task_id = command_parts[1]
+    logger.info(f"Cancel requested for task {task_id} by {message.from_user.id}")
     
-    if not user_tasks:
-        await message.reply_text("❌ You have no active or pending clone tasks.")
+    if await task_queue.cancel_task(task_id, message.from_user.id):
+        await message.reply_text(f"Task {task_id} cancellation requested.")
+    else:
+        await message.reply_text(f"Task {task_id} not found, not yours, or already completed.")
+
+@admin_only
+async def setfolder_command(client: Client, message: Message):
+    """Sets the dynamic destination folder for future uploads."""
+    command_parts = message.text.split(" ", 1)
+    if len(command_parts) == 1:
+        await message.reply_text(
+            f"**Current Destination:** {settings.CURRENT_DESTINATION}\n\n"
+            "To change the folder, send the folder name or path.\n"
+            "**Examples:**\n"
+            "/setfolder Movies\n"
+            "/setfolder Software/Windows\n"
+            "/setfolder / (to upload to the root of the drive)"
+        )
         return
         
-    # Cancel the first active/pending task found
-    task_to_cancel = user_tasks[0]
-    await message.reply_text(f"⏳ Attempting to cancel task `{task_to_cancel.task_id}` (`{task_to_cancel.dest_name}`)...")
+    new_folder = command_parts[1].strip()
     
-    canceled = await task_queue.cancel_task(task_to_cancel.task_id, user_id)
-    if not canceled:
-        await message.reply_text("❌ Failed to cancel task. It might have already finished.")
+    # Remove leading slashes so it builds correctly
+    if new_folder.startswith('/'):
+        new_folder = new_folder[1:]
+        
+    # Build the full destination: fastDrive:FolderName
+    if new_folder == "" or new_folder == "/":
+        new_dest = settings.DRIVE_REMOTE_NAME
+    else:
+        new_dest = f"{settings.DRIVE_REMOTE_NAME}{new_folder}"
+        
+    settings.CURRENT_DESTINATION = new_dest
+    await message.reply_text(f"? **Folder Updated Successfully!**\n\nAll new files will now be uploaded to:\n{settings.CURRENT_DESTINATION}")
