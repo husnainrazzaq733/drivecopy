@@ -320,3 +320,4 @@ class TaskQueue:
             logger.error(f"Telegram error editing message: {e}")
 
 task_queue = TaskQueue()
+

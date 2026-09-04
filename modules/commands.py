@@ -83,7 +83,7 @@ async def stats_command(client: Client, message: Message):
     if active_tasks:
         active_status = ""
         for t in active_tasks:
-            active_status += f"\n?? Running (ID: `{t.task_id}`)\n  +- {t.dest_name} ({t.progress.get('percentage', 0.0):.1f}%)"
+            active_status += f"\n🔄 Running: {t.dest_name} ({t.progress.get('percentage', 0.0):.1f}%)\n  └─ 🛑 Cancel: `/cancel {t.task_id}`"
     else:
         active_status = "?? Idle"
 
@@ -146,5 +146,6 @@ async def setfolder_command(client: Client, message: Message):
         
     settings.CURRENT_DESTINATION = new_dest
     await message.reply_text(f"? **Folder Updated Successfully!**\n\nAll new files will now be uploaded to:\n{settings.CURRENT_DESTINATION}")
+
 
 
