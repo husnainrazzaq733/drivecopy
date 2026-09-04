@@ -78,28 +78,26 @@ async def stats_command(client: Client, message: Message):
     """Fetches and displays task database and queue status."""
     db_stats = db.get_stats()
     queue_size = len(task_queue.pending_tasks)
-    active_task = task_queue.active_task
+    active_tasks = task_queue.active_tasks.values()
     
-    active_status = "??  Idle"
-    if active_task:
-        active_status = (
-            f"?? Running\n"
-            f"  +- ID: {active_task.task_id}\n"
-            f"  +- Name: {active_task.dest_name}\n"
-            f"  +- Percentage: {active_task.progress.get('percentage', 0.0):.1f}%"
-        )
+    if active_tasks:
+        active_status = ""
+        for t in active_tasks:
+            active_status += f"\n?? Running (ID: `{t.task_id}`)\n  +- {t.dest_name} ({t.progress.get('percentage', 0.0):.1f}%)"
+    else:
+        active_status = "?? Idle"
 
     stats_text = (
         f"?? **GDrive Cloner Stats**\n\n"
         f"?? **Task Queue Status**:\n"
-        f"+- **Queue Size**: {queue_size} pending\n"
-        f"+- **Active Task**: {active_status}\n\n"
+        f"+- **Queue Size**: `{queue_size} pending`\n"
+        f"+- **Active Tasks**: {active_status}\n\n"
         f"??? **Database Summary**:\n"
-        f"+- **Total Tasks**: {db_stats['total_tasks']}\n"
-        f"+- **Completed**: {db_stats['completed']}\n"
-        f"+- **Failed**: {db_stats['failed']}\n"
-        f"+- **Canceled**: {db_stats['canceled']}\n"
-        f"+- **Total Transferred**: {format_bytes(db_stats['total_transferred_bytes'])}"
+        f"+- **Total Tasks**: `{db_stats['total_tasks']}`\n"
+        f"+- **Completed**: `{db_stats['completed']}`\n"
+        f"+- **Failed**: `{db_stats['failed']}`\n"
+        f"+- **Canceled**: `{db_stats['canceled']}`\n"
+        f"+- **Total Transferred**: `{format_bytes(db_stats['total_transferred_bytes'])}`"
     )
     await message.reply_text(stats_text)
 
@@ -148,3 +146,5 @@ async def setfolder_command(client: Client, message: Message):
         
     settings.CURRENT_DESTINATION = new_dest
     await message.reply_text(f"? **Folder Updated Successfully!**\n\nAll new files will now be uploaded to:\n{settings.CURRENT_DESTINATION}")
+
+

@@ -71,7 +71,15 @@ async def handle_message(client: Client, message: Message):
         file_name = file_obj.file_name
     elif message.video:
         file_obj = message.video
-        file_name = file_obj.file_name or "video.mp4"
+        file_name = file_obj.file_name
+        if not file_name and message.caption:
+            import re
+            first_line = message.caption.split("\n")[0]
+            safe_name = re.sub(r"[^\w\s-]", "", first_line).strip()[:50]
+            if safe_name:
+                file_name = f"{safe_name}.mp4"
+        if not file_name:
+            file_name = "video.mp4"
     elif message.audio:
         file_obj = message.audio
         file_name = file_obj.file_name or "audio.mp3"
@@ -182,3 +190,4 @@ async def handle_message(client: Client, message: Message):
     except Exception as e:
         logger.exception(f"Unhandled error in clone handler: {e}")
         await status_msg.edit_text(f"❌ **Error Occurred:**\n`{str(e)}`")
+
