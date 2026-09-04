@@ -67,6 +67,7 @@ async def async_main():
         api_id=settings.API_ID,
         api_hash=settings.API_HASH,
         bot_token=settings.BOT_TOKEN,
+        max_concurrent_transmissions=8,
     )
 
     # 3. Register Command Handlers
@@ -96,3 +97,4 @@ async def async_main():
 
 if __name__ == "__main__":
     asyncio.run(async_main())
+
