@@ -84,8 +84,10 @@ async def run_rclone_task(
         cmd = [
             "rclone", "copy", src, dest,
             "--config", settings.RCLONE_CONFIG_PATH,
-            "--transfers", "8",
-            "--checkers", "16",
+            "--drive-chunk-size", "32M",
+            "--multi-thread-streams", "8",
+            "--transfers", "4",
+            "--checkers", "8",
             "--use-json-log",
             "--stats", "2s",
             "--stats-log-level", "NOTICE"
